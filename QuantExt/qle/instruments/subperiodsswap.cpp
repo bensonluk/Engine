@@ -33,7 +33,8 @@ SubPeriodsSwap::SubPeriodsSwap(const Date& effectiveDate, Real nominal, const Pe
                                SubPeriodsCoupon::Type type)
 
     : Swap(2), nominal_(nominal), isPayer_(isPayer), fixedRate_(fixedRate), fixedDayCount_(fixedDayCount),
-      floatIndex_(iborIndex), floatDayCount_(floatingDayCount), floatPayTenor_(floatPayTenor), type_(type) {
+      floatIndex_(iborIndex), floatSpread_(0.0), floatDayCount_(floatingDayCount), floatPayTenor_(floatPayTenor), type_(type),
+      includeSpread_(false) {
 
     Date terminationDate = effectiveDate + swapTenor;
 
@@ -66,11 +67,92 @@ SubPeriodsSwap::SubPeriodsSwap(const Date& effectiveDate, Real nominal, const Pe
 
     legs_[1] = SubPeriodsLeg(floatSchedule_, floatIndex_)
                    .withNotional(nominal_)
+                   .withSpread(floatSpread_)
                    .withPaymentAdjustment(floatPmtConvention)
                    .withPaymentDayCounter(floatDayCount_)
                    .withPaymentCalendar(floatPmtCalendar)
-                   .includeSpread(false)
+                   .includeSpread(includeSpread_)
                    .withType(type_);
+
+    // legs_[0] is fixed
+    payer_[0] = isPayer_ ? -1.0 : +1.0;
+    payer_[1] = isPayer_ ? +1.0 : -1.0;
+
+    // Register this instrument with its coupons
+    Leg::const_iterator it;
+    for (it = legs_[0].begin(); it != legs_[0].end(); ++it)
+        registerWith(*it);
+    for (it = legs_[1].begin(); it != legs_[1].end(); ++it)
+        registerWith(*it);
+}
+
+SubPeriodsSwap::SubPeriodsSwap(const Date& effectiveDate, Real nominal, const Period& swapTenor, bool isPayer,
+                               // fixed leg
+                               const Period& fixedTenor, Rate fixedRate, const Calendar& fixedCalendar,
+                               const DayCounter& fixedDayCount, BusinessDayConvention fixedConvention,
+                               BusinessDayConvention fixedTerminationConvention,
+                               Natural fixedPaymentLag, boost::optional<DateGeneration::Rule> fixedRule,
+                               // float leg
+                               const Period& floatPayTenor, const Calendar& floatCalendar,
+                               const DayCounter& floatDayCount, BusinessDayConvention floatConvention,
+                               BusinessDayConvention floatTerminationConvention,
+                               const boost::shared_ptr<IborIndex>& iborIndex, Spread floatSpread,
+                               Natural floatPaymentLag, boost::optional<DateGeneration::Rule> floatRule,
+                               // Sub period
+                               const Calendar& subPeriodsCalendar, BusinessDayConvention subPeriodsConvention,
+                               BusinessDayConvention subPeriodsTerminationConvention,
+                               boost::optional<SubPeriodsCoupon::Type> type, boost::optional<bool> includeSpread,
+                               boost::optional<DateGeneration::Rule> subPeriodsRule 
+                               )
+
+    : Swap(2), nominal_(nominal), isPayer_(isPayer), fixedRate_(fixedRate), fixedDayCount_(fixedDayCount),
+      floatIndex_(iborIndex), floatSpread_(floatSpread), floatDayCount_(floatDayCount), floatPayTenor_(floatPayTenor),
+      type_(type == boost::none ? SubPeriodsCoupon::Type::Compounding : *type),
+      includeSpread_(type == boost::none ? false : *includeSpread)
+    {
+
+    Date terminationDate = effectiveDate + swapTenor;
+
+    // Fixed leg
+    fixedSchedule_ = MakeSchedule()
+        .from(effectiveDate)
+        .to(terminationDate)
+        .withTenor(fixedTenor)
+        .withCalendar(fixedCalendar)
+        .withConvention(fixedConvention)
+        .withTerminationDateConvention(fixedTerminationConvention)
+        .withRule(subPeriodsRule == boost::none ? DateGeneration::Rule::Backward : *subPeriodsRule);
+
+    legs_[0] = FixedRateLeg(fixedSchedule_)
+        .withNotionals(nominal_)
+        .withCouponRates(fixedRate_, fixedDayCount_)
+        .withPaymentAdjustment(fixedConvention)
+        .withPaymentLag(fixedPaymentLag);
+
+    // Sub Periods Leg, schedule is the PAY schedule
+    BusinessDayConvention floatPmtConvention = floatConvention;
+    Calendar floatPmtCalendar = floatCalendar;
+    floatSchedule_ = MakeSchedule()
+        .from(effectiveDate)
+        .to(terminationDate)
+        .withTenor(floatPayTenor)
+        .withCalendar(floatPmtCalendar)
+        .withConvention(floatPmtConvention)
+        .withTerminationDateConvention(floatTerminationConvention)
+        .withRule(floatRule == boost::none ? DateGeneration::Rule::Backward : *floatRule);
+
+    legs_[1] = SubPeriodsLeg(floatSchedule_, floatIndex_)
+        .withNotional(nominal_)
+        .withSpread(floatSpread_)
+        .withPaymentAdjustment(floatPmtConvention)
+        .withPaymentDayCounter(floatDayCount_)
+        .withPaymentCalendar(floatPmtCalendar)
+        .withPaymentLag(floatPaymentLag)
+        .withSubPeriodsAdjustment(subPeriodsConvention)
+        .withSubPeriodsCalendar(subPeriodsCalendar)
+        .includeSpread(includeSpread_)
+        .withType(type_)
+        .withSubPeriodsRule(subPeriodsRule == boost::none ? DateGeneration::Rule::Backward : *subPeriodsRule);
 
     // legs_[0] is fixed
     payer_[0] = isPayer_ ? -1.0 : +1.0;

@@ -46,7 +46,30 @@ public:
                    const boost::shared_ptr<IborIndex>& iborIndex, const DayCounter& floatingDayCount,
                    DateGeneration::Rule rule = DateGeneration::Backward,
                    SubPeriodsCoupon::Type type = SubPeriodsCoupon::Compounding);
+
+    //! Constructor with subperiod conventions spefified explicitly
+    SubPeriodsSwap(const Date& effectiveDate, Real nominal, const Period& swapTenor, bool isPayer,
+        // fixed leg
+        const Period& fixedTenor, Rate fixedRate, const Calendar& fixedCalendar,
+        const DayCounter& fixedDayCount, BusinessDayConvention fixedConvention,
+        BusinessDayConvention fixedTerminationConvention,
+        Natural fixedPaymentLag, boost::optional<DateGeneration::Rule> fixedRule,
+        // float leg
+        const Period& floatPayTenor, const Calendar& floatCalendar,
+        const DayCounter& floatDayCount, BusinessDayConvention floatConvention,
+        BusinessDayConvention floatTerminationConvention,
+        const boost::shared_ptr<IborIndex>& iborIndex, Spread floatSpread,
+        Natural floatPaymentLag, boost::optional<DateGeneration::Rule> floatRule,
+        // Sub period
+        const Calendar& subPeriodsCalendar, BusinessDayConvention subPeriodsConvention,
+        BusinessDayConvention subPeriodsTerminationConvention,
+        boost::optional<SubPeriodsCoupon::Type> type, boost::optional<bool> includeSpread,
+        boost::optional<DateGeneration::Rule> subPeriodsRule
+        );
+
     //@}
+
+
     //! \name Inspectors
     //@{
     Real nominal() const;
@@ -82,6 +105,8 @@ private:
 
     Schedule floatSchedule_;
     boost::shared_ptr<IborIndex> floatIndex_;
+    Spread floatSpread_;
+    bool includeSpread_;
     DayCounter floatDayCount_;
     Period floatPayTenor_;
     SubPeriodsCoupon::Type type_;
