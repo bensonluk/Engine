@@ -48,6 +48,13 @@ public:
                      const boost::shared_ptr<InterestRateIndex>& index, Type type, BusinessDayConvention convention,
                      Spread spread = 0.0, const DayCounter& dayCounter = DayCounter(), bool includeSpread = false,
                      Real gearing = 1.0);
+
+    SubPeriodsCoupon(const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate,
+                     const Calendar& calendar, const boost::shared_ptr<InterestRateIndex>& index, Type type,
+                     BusinessDayConvention convention, BusinessDayConvention terminationConvention, Spread spread = 0.0, 
+                     const DayCounter& dayCounter = DayCounter(), DateGeneration::Rule rule = DateGeneration::Rule::Backward, 
+                     bool includeSpread = false, Real gearing = 1.0);
+
     //! \name Inspectors
     //@{
     //! fixing dates for the sub-periods
@@ -94,11 +101,16 @@ public:
     SubPeriodsLeg& withNotionals(const std::vector<Real>& notionals);
     SubPeriodsLeg& withPaymentDayCounter(const DayCounter& dayCounter);
     SubPeriodsLeg& withPaymentAdjustment(BusinessDayConvention convention);
+    SubPeriodsLeg& withSubPeriodsAdjustment(BusinessDayConvention convention);
+    SubPeriodsLeg& withSubPeriodsTerminationDateAdjustment(BusinessDayConvention convention);
     SubPeriodsLeg& withGearing(Real gearing);
     SubPeriodsLeg& withGearings(const std::vector<Real>& gearings);
     SubPeriodsLeg& withSpread(Spread spread);
     SubPeriodsLeg& withSpreads(const std::vector<Spread>& spreads);
     SubPeriodsLeg& withPaymentCalendar(const Calendar& calendar);
+    SubPeriodsLeg& withPaymentLag(Natural lag);
+    SubPeriodsLeg& withSubPeriodsCalendar(const Calendar& calendar);
+    SubPeriodsLeg& withSubPeriodsRule(DateGeneration::Rule rule);
     SubPeriodsLeg& withType(SubPeriodsCoupon::Type type);
     SubPeriodsLeg& includeSpread(bool includeSpread);
     operator Leg() const;
@@ -109,9 +121,14 @@ private:
     std::vector<Real> notionals_;
     DayCounter paymentDayCounter_;
     BusinessDayConvention paymentAdjustment_;
+    BusinessDayConvention subPeriodsAdjustment_;
+    BusinessDayConvention subPeriodsTerminationAdjustment_;
     std::vector<Real> gearings_;
     std::vector<Spread> spreads_;
     Calendar paymentCalendar_;
+    Natural paymentLag_;
+    Calendar subPeriodsCalendar_;
+    DateGeneration::Rule subPeriodsRule_;
     SubPeriodsCoupon::Type type_;
     bool includeSpread_;
 };

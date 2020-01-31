@@ -65,6 +65,44 @@ SubPeriodsCoupon::SubPeriodsCoupon(const Date& paymentDate, Real nominal, const 
     }
 }
 
+SubPeriodsCoupon::SubPeriodsCoupon(const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate,
+                                   const Calendar& calendar, const boost::shared_ptr<InterestRateIndex>& index, Type type,
+                                   BusinessDayConvention convention, BusinessDayConvention terminationConvention, Spread spread, 
+                                   const DayCounter& dayCounter, DateGeneration::Rule rule, bool includeSpread, Real gearing)
+    : FloatingRateCoupon(paymentDate, nominal, startDate, endDate, index->fixingDays(), index, gearing, spread, Date(),
+        Date(), dayCounter, false),
+    type_(type), includeSpread_(includeSpread) {
+
+    // Populate the value dates.
+    Schedule sch = MakeSchedule()
+        .from(startDate)
+        .to(endDate)
+        .withTenor(index->tenor())
+        .withCalendar(calendar) // follow input accrual cdr instead of fixing cdr
+        .withConvention(convention)
+        .withTerminationDateConvention(terminationConvention) // allow to be different from convention
+        .withRule(rule); // no long assumes backwards
+    valueDates_ = sch.dates();
+    QL_ENSURE(valueDates_.size() >= 2, "Degenerate schedule.");
+
+    // Populate the fixing dates.
+    numPeriods_ = valueDates_.size() - 1;
+    if (index->fixingDays() == 0) {
+        fixingDates_ = std::vector<Date>(valueDates_.begin(), valueDates_.end() - 1);
+    }
+    else {
+        fixingDates_.resize(numPeriods_);
+        for (Size i = 0; i < numPeriods_; ++i)
+            fixingDates_[i] = index->fixingDate(valueDates_[i]);
+    }
+
+    // Populate the accrual periods.
+    accrualFractions_.resize(numPeriods_);
+    for (Size i = 0; i < numPeriods_; ++i) {
+        accrualFractions_[i] = dayCounter.yearFraction(valueDates_[i], valueDates_[i + 1]);
+    }
+}
+
 const std::vector<Rate>& SubPeriodsCoupon::indexFixings() const {
 
     fixings_.resize(numPeriods_);
@@ -87,7 +125,9 @@ void SubPeriodsCoupon::accept(AcyclicVisitor& v) {
 
 SubPeriodsLeg::SubPeriodsLeg(const Schedule& schedule, const boost::shared_ptr<InterestRateIndex>& index)
     : schedule_(schedule), index_(index), notionals_(std::vector<Real>(1, 1.0)), paymentAdjustment_(Following),
-      paymentCalendar_(Calendar()), type_(SubPeriodsCoupon::Compounding) {}
+      subPeriodsAdjustment_(Following), subPeriodsTerminationAdjustment_(Following), 
+      paymentCalendar_(Calendar()), paymentLag_(0), subPeriodsCalendar_(index->fixingCalendar()),
+      subPeriodsRule_(DateGeneration::Rule::Backward), type_(SubPeriodsCoupon::Compounding) {}
 
 SubPeriodsLeg& SubPeriodsLeg::withNotional(Real notional) {
     notionals_ = std::vector<Real>(1, notional);
@@ -106,6 +146,16 @@ SubPeriodsLeg& SubPeriodsLeg::withPaymentDayCounter(const DayCounter& dayCounter
 
 SubPeriodsLeg& SubPeriodsLeg::withPaymentAdjustment(BusinessDayConvention convention) {
     paymentAdjustment_ = convention;
+    return *this;
+}
+
+SubPeriodsLeg& SubPeriodsLeg::withSubPeriodsAdjustment(BusinessDayConvention convention) {
+    subPeriodsAdjustment_ = convention;
+    return *this;
+}
+
+SubPeriodsLeg& SubPeriodsLeg::withSubPeriodsTerminationDateAdjustment(BusinessDayConvention convention) {
+    subPeriodsTerminationAdjustment_ = convention;
     return *this;
 }
 
@@ -131,6 +181,21 @@ SubPeriodsLeg& SubPeriodsLeg::withSpreads(const std::vector<Spread>& spreads) {
 
 SubPeriodsLeg& SubPeriodsLeg::withPaymentCalendar(const Calendar& calendar) {
     paymentCalendar_ = calendar;
+    return *this;
+}
+
+SubPeriodsLeg& SubPeriodsLeg::withPaymentLag(Natural lag) {
+    paymentLag_ = lag;
+    return *this;
+}
+
+SubPeriodsLeg& SubPeriodsLeg::withSubPeriodsCalendar(const Calendar& calendar) {
+    subPeriodsCalendar_ = calendar;
+    return *this;
+}
+
+SubPeriodsLeg& SubPeriodsLeg::withSubPeriodsRule(DateGeneration::Rule rule) {
+    subPeriodsRule_ = rule;
     return *this;
 }
 
@@ -166,6 +231,8 @@ SubPeriodsLeg::operator Leg() const {
     for (Size i = 0; i < numPeriods; ++i) {
         endDate = schedule_.date(i + 1);
         paymentDate = calendar.adjust(endDate, paymentAdjustment_);
+        paymentDate = calendar.advance(paymentDate, paymentLag_, Days, paymentAdjustment_);
+
         // the sub periods coupon might produce degenerated schedules, in this
         // case we just join the current period with the next one
         // we catch all QL exceptions here, although we should only pick the one
@@ -175,8 +242,9 @@ SubPeriodsLeg::operator Leg() const {
         try {
             boost::shared_ptr<SubPeriodsCoupon> cashflow(
                 new SubPeriodsCoupon(paymentDate, detail::get(notionals_, i, notionals_.back()), startDate, endDate,
-                                     index_, type_, paymentAdjustment_, detail::get(spreads_, i, 0.0),
-                                     paymentDayCounter_, includeSpread_, detail::get(gearings_, i, 1.0)));
+                                     subPeriodsCalendar_, index_, type_, subPeriodsAdjustment_, subPeriodsTerminationAdjustment_,
+                                     detail::get(spreads_, i, 0.0), paymentDayCounter_, subPeriodsRule_,
+                                     includeSpread_, detail::get(gearings_, i, 1.0)));
 
             cashflows.push_back(cashflow);
             startDate = endDate;
