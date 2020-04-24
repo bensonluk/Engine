@@ -16,6 +16,7 @@
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
 
+#include <ql/time/calendars/jointcalendar.hpp>
 #include <ql/pricingengines/swap/discountingswapengine.hpp>
 #include <qle/termstructures/subperiodsswaphelper.hpp>
 
@@ -32,9 +33,17 @@ SubPeriodsSwapHelper::SubPeriodsSwapHelper(Handle<Quote> spread, const Period& s
                                            const DayCounter& floatDayCount,
                                            const Handle<YieldTermStructure>& discountingCurve,
                                            SubPeriodsCoupon::Type type)
-    : RelativeDateRateHelper(spread), iborIndex_(iborIndex), swapTenor_(swapTenor), fixedTenor_(fixedTenor),
+    : RelativeDateRateHelper(spread), settlementDays_(iborIndex->fixingDays()), iborIndex_(iborIndex), swapTenor_(swapTenor),
+      fixedTenor_(fixedTenor),
       fixedCalendar_(fixedCalendar), fixedDayCount_(fixedDayCount), fixedConvention_(fixedConvention),
-      floatPayTenor_(floatPayTenor), floatDayCount_(floatDayCount), type_(type), discountHandle_(discountingCurve) {
+      fixedTerminationConvention_(fixedConvention), fixedPaymentLag_(0), fixedRule_(DateGeneration::Rule::Backward),
+      floatPayTenor_(floatPayTenor), floatCalendar_(iborIndex->fixingCalendar()), floatDayCount_(floatDayCount), 
+      floatConvention_(iborIndex->businessDayConvention()),
+      floatTerminationConvention_(iborIndex->businessDayConvention()),
+      floatSpread_(0.0), floatPaymentLag_(0), floatRule_(DateGeneration::Rule::Backward),
+      subPeriodsCalendar_(iborIndex->fixingCalendar()), subPeriodsConvention_(iborIndex->businessDayConvention()),
+      subPeriodsTerminationConvention_(iborIndex->businessDayConvention()),
+      type_(type), includeSpread_(false), subPeriodsRule_(DateGeneration::Rule::Backward), discountHandle_(discountingCurve) {
 
     iborIndex_ = iborIndex_->clone(termStructureHandle_);
     iborIndex_->unregisterWith(termStructureHandle_);
@@ -46,19 +55,76 @@ SubPeriodsSwapHelper::SubPeriodsSwapHelper(Handle<Quote> spread, const Period& s
     initializeDates();
 }
 
+SubPeriodsSwapHelper::SubPeriodsSwapHelper(Handle<Quote> spread, const Period& swapTenor,
+                                           // fixed leg
+                                           const Period& fixedTenor, const Calendar& fixedCalendar, 
+                                           const DayCounter& fixedDayCount, BusinessDayConvention fixedConvention,
+                                           BusinessDayConvention fixedTerminationConvention,
+                                           Natural fixedPaymentLag, boost::optional<DateGeneration::Rule> fixedRule,
+                                           // float leg
+                                           const Period& floatPayTenor, const Calendar& floatCalendar,
+                                           const DayCounter& floatDayCount, BusinessDayConvention floatConvention,
+                                           BusinessDayConvention floatTerminationConvention,
+                                           const boost::shared_ptr<IborIndex>& iborIndex, Spread floatSpread,
+                                           Natural floatPaymentLag, boost::optional<DateGeneration::Rule> floatRule,
+                                           // sub-periods
+                                           const Calendar& subPeriodsCalendar, BusinessDayConvention subPeriodsConvention,
+                                           BusinessDayConvention subPeriodsTerminationConvention,
+                                           boost::optional<SubPeriodsCoupon::Type> type, boost::optional<bool> includeSpread,
+                                           boost::optional<DateGeneration::Rule> subPeriodsRule,
+                                           // discount curve
+                                           const Handle<YieldTermStructure>& discountingCurve,
+                                           boost::optional<Natural> settlementDays)
+    : RelativeDateRateHelper(spread), 
+      iborIndex_(iborIndex), swapTenor_(swapTenor), fixedTenor_(fixedTenor),
+      settlementDays_(settlementDays == boost::none || *settlementDays == Null<Natural>() ? 0 : *settlementDays), 
+      fixedCalendar_(fixedCalendar), fixedDayCount_(fixedDayCount), fixedConvention_(fixedConvention),
+      fixedTerminationConvention_(fixedTerminationConvention), fixedPaymentLag_(fixedPaymentLag),
+      fixedRule_(fixedRule == boost::none ? DateGeneration::Rule::Backward : * fixedRule),
+      floatPayTenor_(floatPayTenor), floatCalendar_(floatCalendar), floatDayCount_(floatDayCount), 
+      floatConvention_(floatConvention), floatTerminationConvention_(floatTerminationConvention),
+      floatSpread_(floatSpread), floatPaymentLag_(floatPaymentLag), 
+      floatRule_(floatRule == boost::none ? DateGeneration::Rule::Backward : *floatRule),
+      subPeriodsCalendar_(subPeriodsCalendar), subPeriodsConvention_(subPeriodsConvention),
+      subPeriodsTerminationConvention_(subPeriodsTerminationConvention),
+      type_(type == boost::none ? SubPeriodsCoupon::Type::Compounding : *type),
+      includeSpread_(includeSpread == boost::none ? false : *includeSpread),
+      subPeriodsRule_(subPeriodsRule == boost::none ? DateGeneration::Rule::Backward : *subPeriodsRule),
+      discountHandle_(discountingCurve) {
+
+    iborIndex_ = iborIndex_->clone(termStructureHandle_);
+    iborIndex_->unregisterWith(termStructureHandle_);
+
+    registerWith(iborIndex_);
+    registerWith(spread);
+    registerWith(discountHandle_);
+
+    initializeDates();
+}
+
+
 void SubPeriodsSwapHelper::initializeDates() {
 
     // build swap
     Date valuationDate = Settings::instance().evaluationDate();
-    Calendar spotCalendar = iborIndex_->fixingCalendar();
-    Natural spotDays = iborIndex_->fixingDays();
+    Calendar spotCalendar = JointCalendar(fixedCalendar_, floatCalendar_);
+    Natural spotDays = settlementDays_;
     // move val date forward in case it is a holiday
     valuationDate = spotCalendar.adjust(valuationDate);
     Date effectiveDate = spotCalendar.advance(valuationDate, spotDays * Days);
 
     swap_ = boost::shared_ptr<SubPeriodsSwap>(new SubPeriodsSwap(
-        effectiveDate, 1.0, swapTenor_, true, fixedTenor_, 0.0, fixedCalendar_, fixedDayCount_, fixedConvention_,
-        floatPayTenor_, iborIndex_, floatDayCount_, DateGeneration::Backward, type_));
+
+        effectiveDate, 1.0, swapTenor_, true,
+        // fixed leg
+        fixedTenor_, 0.0, fixedCalendar_, fixedDayCount_,fixedConvention_,
+        fixedTerminationConvention_, fixedPaymentLag_, fixedRule_,
+        // float leg
+        floatPayTenor_, floatCalendar_, floatDayCount_, floatConvention_,
+        floatTerminationConvention_, iborIndex_, floatSpread_, floatPaymentLag_, floatRule_,
+        // Sub period
+        subPeriodsCalendar_, subPeriodsConvention_, subPeriodsTerminationConvention_,
+        type_, includeSpread_, subPeriodsRule_));
 
     boost::shared_ptr<PricingEngine> engine(new DiscountingSwapEngine(discountRelinkableHandle_));
     swap_->setPricingEngine(engine);

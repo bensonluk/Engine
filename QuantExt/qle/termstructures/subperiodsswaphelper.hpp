@@ -28,6 +28,8 @@
 
 #include <qle/instruments/subperiodsswap.hpp>
 
+//#include <boost/optional.hpp>
+
 namespace QuantExt {
 using namespace QuantLib;
 
@@ -42,6 +44,25 @@ public:
                          const boost::shared_ptr<IborIndex>& iborIndex, const DayCounter& floatDayCount,
                          const Handle<YieldTermStructure>& discountingCurve = Handle<YieldTermStructure>(),
                          SubPeriodsCoupon::Type type = SubPeriodsCoupon::Compounding);
+    
+    SubPeriodsSwapHelper(Handle<Quote> spread, const Period& swapTenor, 
+                        // fixed leg
+                         const Period& fixedTenor, const Calendar& fixedCalendar, const DayCounter& fixedDayCount,
+                         BusinessDayConvention fixedConvention, BusinessDayConvention fixedTerminationConvention,
+                         Natural fixedPaymentLag, boost::optional<DateGeneration::Rule> fixedRule,
+                         // float leg
+                         const Period& floatPayTenor, const Calendar& floatCalendar, const DayCounter& floatDayCount,
+                         BusinessDayConvention floatConvention, BusinessDayConvention floatTerminationConvention,
+                         const boost::shared_ptr<IborIndex>& iborIndex, Spread floatSpread, Natural floatPaymentLag,
+                         boost::optional<DateGeneration::Rule> floatRule,
+                         // sub-periods
+                         const Calendar& subPeriodsCalendar, BusinessDayConvention subPeriodsConvention,
+                         BusinessDayConvention subPeriodsTerminationConvention,
+                         boost::optional<SubPeriodsCoupon::Type> type, boost::optional<bool> includeSpread,
+                         boost::optional<DateGeneration::Rule> subPeriodsRule,
+                         // discount curve
+                         const Handle<YieldTermStructure>& discountingCurve,
+                         boost::optional<Natural> settlementDays);
 
     //! \name RateHelper interface
     //@{
@@ -63,14 +84,32 @@ protected:
 private:
     boost::shared_ptr<SubPeriodsSwap> swap_;
     boost::shared_ptr<IborIndex> iborIndex_;
+    Natural settlementDays_;
     Period swapTenor_;
+
     Period fixedTenor_;
     Calendar fixedCalendar_;
     DayCounter fixedDayCount_;
     BusinessDayConvention fixedConvention_;
+    BusinessDayConvention fixedTerminationConvention_;
+    Natural fixedPaymentLag_;
+    DateGeneration::Rule fixedRule_;
+
     Period floatPayTenor_;
+    Calendar floatCalendar_;
     DayCounter floatDayCount_;
+    BusinessDayConvention floatConvention_;
+    BusinessDayConvention floatTerminationConvention_;
+    Spread floatSpread_;
+    Natural floatPaymentLag_;
+    DateGeneration::Rule floatRule_;
+
+    Calendar subPeriodsCalendar_;
+    BusinessDayConvention subPeriodsConvention_;
+    BusinessDayConvention subPeriodsTerminationConvention_;
     SubPeriodsCoupon::Type type_;
+    bool includeSpread_;
+    DateGeneration::Rule subPeriodsRule_;
 
     RelinkableHandle<YieldTermStructure> termStructureHandle_;
     Handle<YieldTermStructure> discountHandle_;
