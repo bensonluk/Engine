@@ -292,7 +292,7 @@ MakeCrossCcyFixFloatSwap::withFixedLegDayCount(const DayCounter& dc) {
 }
 
 MakeCrossCcyFixFloatSwap&
-MakeCrossCcyFixFloatSwap::withFixedPaymentLag(Natural lag) {
+MakeCrossCcyFixFloatSwap::withFixedLegPaymentLag(Natural lag) {
     fixedPaymentLag_ = lag;
     return *this;
 }
@@ -354,7 +354,7 @@ MakeCrossCcyFixFloatSwap& MakeCrossCcyFixFloatSwap::withFloatingLegSpread(Spread
 }
 
 MakeCrossCcyFixFloatSwap&
-MakeCrossCcyFixFloatSwap::withFloatingPaymentLag(Natural lag) {
+MakeCrossCcyFixFloatSwap::withFloatingLegPaymentLag(Natural lag) {
     floatPaymentLag_ = lag;
     return *this;
 }

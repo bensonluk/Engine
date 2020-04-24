@@ -44,7 +44,7 @@ public:
     MakeCrossCcyFixFloatSwap& withFixedLegFirstDate(const QuantLib::Date& d);
     MakeCrossCcyFixFloatSwap& withFixedLegNextToLastDate(const QuantLib::Date& d);
     MakeCrossCcyFixFloatSwap& withFixedLegDayCount(const QuantLib::DayCounter& dc);
-    MakeCrossCcyFixFloatSwap& withFixedPaymentLag(QuantLib::Natural lag);
+    MakeCrossCcyFixFloatSwap& withFixedLegPaymentLag(QuantLib::Natural lag);
 
     MakeCrossCcyFixFloatSwap& withFloatingNominal(QuantLib::Real n);
     MakeCrossCcyFixFloatSwap& withFloatingLegTenor(const QuantLib::Period& t);
@@ -58,7 +58,7 @@ public:
     MakeCrossCcyFixFloatSwap& withFloatingLegNextToLastDate(const QuantLib::Date& d);
     MakeCrossCcyFixFloatSwap& withFloatingLegDayCount(const QuantLib::DayCounter& dc);
     MakeCrossCcyFixFloatSwap& withFloatingLegSpread(QuantLib::Spread sp);
-    MakeCrossCcyFixFloatSwap& withFloatingPaymentLag(QuantLib::Natural lag);
+    MakeCrossCcyFixFloatSwap& withFloatingLegPaymentLag(QuantLib::Natural lag);
 
     MakeCrossCcyFixFloatSwap& withPricingEngine(const boost::shared_ptr<QuantLib::PricingEngine>& engine);
 
