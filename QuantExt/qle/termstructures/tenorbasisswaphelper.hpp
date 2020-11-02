@@ -40,7 +40,8 @@ public:
                          const boost::shared_ptr<IborIndex> shortIndex, const Period& shortPayTenor = Period(),
                          const Handle<YieldTermStructure>& discountingCurve = Handle<YieldTermStructure>(),
                          bool spreadOnShort = true, bool includeSpread = false,
-                         SubPeriodsCoupon::Type type = SubPeriodsCoupon::Compounding);
+                         SubPeriodsCoupon::Type type = SubPeriodsCoupon::Compounding,
+                         Natural settlementDays = Null<Natural>());
 
     //! \name RateHelper interface
     //@{
@@ -60,6 +61,7 @@ protected:
     void initializeDates();
 
     Period swapTenor_;
+    Natural settlementDays_;
     boost::shared_ptr<IborIndex> longIndex_;
     boost::shared_ptr<IborIndex> shortIndex_;
     Period shortPayTenor_;

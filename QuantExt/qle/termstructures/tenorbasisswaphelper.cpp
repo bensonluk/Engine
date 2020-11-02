@@ -32,9 +32,10 @@ TenorBasisSwapHelper::TenorBasisSwapHelper(Handle<Quote> spread, const Period& s
                                            const boost::shared_ptr<IborIndex> longIndex,
                                            const boost::shared_ptr<IborIndex> shortIndex, const Period& shortPayTenor,
                                            const Handle<YieldTermStructure>& discountingCurve, bool spreadOnShort,
-                                           bool includeSpread, SubPeriodsCoupon::Type type)
+                                           bool includeSpread, SubPeriodsCoupon::Type type, Natural settlementDays)
     : RelativeDateRateHelper(spread), swapTenor_(swapTenor), longIndex_(longIndex), shortIndex_(shortIndex),
-      spreadOnShort_(spreadOnShort), includeSpread_(includeSpread), type_(type), discountHandle_(discountingCurve) {
+      spreadOnShort_(spreadOnShort), includeSpread_(includeSpread), type_(type), discountHandle_(discountingCurve),
+      settlementDays_(settlementDays) {
 
     bool longIndexHasCurve = !longIndex_->forwardingTermStructure().empty();
     bool shortIndexHasCurve = !shortIndex_->forwardingTermStructure().empty();
@@ -64,7 +65,7 @@ void TenorBasisSwapHelper::initializeDates() {
 
     boost::shared_ptr<Libor> longIndexAsLibor = boost::dynamic_pointer_cast<Libor>(longIndex_);
     Calendar spotCalendar = longIndexAsLibor != NULL ? longIndexAsLibor->jointCalendar() : longIndex_->fixingCalendar();
-    Natural spotDays = longIndex_->fixingDays();
+    Natural spotDays = settlementDays_==Null<Natural>() ? longIndex_->fixingDays() : settlementDays_;
 
     Date valuationDate = Settings::instance().evaluationDate();
     // if the evaluation date is not a business day
